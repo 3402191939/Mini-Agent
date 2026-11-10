@@ -29,6 +29,44 @@ def read_file(path: str) -> str:
     file = resolve_path(path)
     return file.read_text(encoding="utf-8")
 
+def search_code(keyword: str, path: str = ".") -> list[dict]:
+    """
+    Search for a keyword in specified directory recursively, max 20 results.
+    """
+    if not isinstance(keyword, str) or not keyword.strip():
+        raise ValueError("keyword must be a non-empty string.")
+    directory = resolve_path(path)
+    if not directory.is_dir():
+        raise ValueError("path must be a directory.")
+
+    results = []
+    allowed_suffixes = {".py", ".md", ".txt", ".json"}
+    for file in sorted(directory.rglob("*")):
+        # except directories and files with disallowed suffixes
+        if not file.is_file() or file.suffix.lower() not in allowed_suffixes:
+            continue
+
+        # skip links that point outside the specified directory
+        resolved_file = file.resolve()
+        if not resolved_file.is_relative_to(ROOT):
+            continue
+
+        try:
+            content = resolved_file.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+
+        for line_number, line in enumerate(content.splitlines(), start=1):
+            if keyword in line:
+                results.append({
+                    "path": file.relative_to(ROOT).as_posix(),
+                    "line": line_number,
+                    "text": line,
+                })
+                if len(results) >= 20:
+                    return results
+    return results
+
 if __name__=="__main__":
     print("directory: ")
     print(list_files())
