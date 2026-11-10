@@ -1,3 +1,3 @@
-# 示例项目
+# example project
 
-项目的启动入口是 main.py。
+entrance of the project is main.py

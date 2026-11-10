@@ -12,6 +12,9 @@ list_files(path="."): Lists the immediate children of a directory.
 
 read_file(path): Reads a UTF-8 text file.
 
+search_code(keyword, path="."): Search keyword in directory recursively, returning file paths, line numbers, and original lines, up to 20 results. 
+Search is case-sensitive and only searches .py, .md, .txt, and .json files.
+
 All paths are relative to the project root directory accessible to the tools.
 
 The tools are executed by a local program.
@@ -44,36 +47,76 @@ def run_agent(question: str, max_steps: int = 8) -> None:
     ]
 
     for step in range(1, max_steps+1):
-        # every time output the full conversation context so that it can be manually sent to the model
-        prompt = (
-            INSTRUCTIONS
-            + "\n\nHere is the complete history of the current task. Please provide the next action."
-            + json.dumps(history, ensure_ascii=False, indent=2)
-        )
-        print(f"\n==== Turn {step}: copy content below to the model ====")
+        if step == 1:
+            # In the first turn, provide rules and user's questions
+            prompt = INSTRUCTIONS + "\n\nuser's question:\n" + question
+        else:
+            # In subsequent turns, send last tool call result and history.
+            prompt = (
+                "last tool call result:\n"
+                + json.dumps(history[-2:], ensure_ascii=False, indent=2)
+                + "\nPlease go on with promissed JSON action."
+            )
+
+        print(f"\n====== Turn {step}/{max_steps} ======")
+        print("The prompt below will be sent to the model:\n")
         print(prompt)
-        raw = input("\nPlease paste the model's response (JSON object) here:\n")
 
-        try:
-            action = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            print(f"JSON parsing failed: {exc}, please try again.")
-            return
-
-        if not isinstance(action, dict):
-            print("The model's action must be a JSON object.")
-            return
-
-        action_type = action.get("type")
-        if action_type == "final":
-            content = action.get("content")
-            if not isinstance(content, str) or not content.strip():
-                print("The final answer must include a 'content' field with a non-empty string.")
+        # When the input failed, repeat input this turn.
+        while True:
+            raw = input("\nPlease paste the single-line JSON action from the model"
+                        "(enter '/quit' to stop): \n"
+            )
+            if raw.strip() == "/quit":
+                print("The task was stopped by the user.")
                 return
-            print("\nFinal Answer: ")
-            print(content)
-            return
+            
+            try:
+                action = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                print(f"JSON parsing failed: {exc}, please try again.")
+                continue
 
-        if action_type == "tool_call":
-            result = execute_tool(action)
-            history.append
+            if not isinstance(action, dict):
+                print("The model's action must be a JSON object.")
+                continue
+
+            action_type = action.get("type")
+            if action_type == "final":
+                content = action.get("content")
+                if not isinstance(content, str) or not content.strip():
+                    print("The final answer must include a 'content' field with a non-empty string.")
+                    continue
+            elif action_type != "tool_call":
+                print("Type must be tool_call or final, please paste again.")
+                continue
+            break
+
+        history.append({
+            "role": "assistant",
+            "content": action,
+        })
+
+        if action_type == "final":
+            print("\nFinal answer:")
+            print(action["content"])
+            return
+        result = execute_tool(action)
+        history.append({
+            "role": "tool",
+            "name": action.get("name"),
+            "content": result,
+        })
+        print("\nTool call executed result: ")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    print("\nReached maximum number of steps, the task stopped.")
+
+if __name__ == "__main__":
+    try:
+        question = input("Please enter your question:\n")
+        if question:
+            run_agent(question)
+        else:
+            print("The question field cannot be empty.")
+    except (KeyboardInterrupt, EOFError):
+        print("\nThe task was stopped.")

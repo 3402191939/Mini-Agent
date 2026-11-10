@@ -1,10 +1,11 @@
 import json
 
-from tools import list_files, read_file
+from tools import list_files, read_file, search_code
 
 TOOLS = {
     "list_files": list_files,
     "read_file": read_file,
+    "search_code": search_code,
 }
 
 def execute_tool(request: dict) -> dict:
