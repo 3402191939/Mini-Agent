@@ -41,7 +41,7 @@ if __name__ == "__main__":
     try:
         request = json.loads(request_json)
     except json.JSONDecodeError as exc:
-        print(f"JSON 格式错误：{exc}")
+        print(f"JSON format error: {exc}")
     else:
         result = execute_tool(request)
         print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -11,7 +11,8 @@ Available tools:
 
 list_files(path="."): Lists the immediate children of a directory.
 
-read_file(path): Reads a UTF-8 text file.
+read_file(path, start_line=1, end_line=None): Read UTF-8 text file, returning content with line numbers. 
+Line numbers start from 1, including the end line, and at most 100 lines are returned per call. Call with a new start_line when subsequent content is needed.
 
 search_code(keyword, path="."): Search keyword in directory recursively, returning file paths, line numbers, and original lines, up to 20 results. 
 Search is case-sensitive and only searches .py, .md, .txt, and .json files.

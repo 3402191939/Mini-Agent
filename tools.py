@@ -22,12 +22,43 @@ def list_files(path: str = ".") -> list[str]:
         for item in sorted(directory.iterdir())
     ]
 
-def read_file(path: str) -> str:
+def read_file(path: str, start_line: int = 1, end_line: int | None = None) -> str:
     """
-    Read a text file in UTF-8 encoding.
+    Read specified lines from a file and max 100 lines, starting from 1.
     """
+    if type(start_line) is not int or start_line < 1:
+        raise ValueError("start_line must be an integer greater than 0.")
+
+    if end_line is not None:
+        if type(end_line) is not int or end_line < start_line:
+            raise ValueError("end_line must be an integer greater than or equal to start_line.")
+    
     file = resolve_path(path)
-    return file.read_text(encoding="utf-8")
+    lines = file.read_text(encoding="utf-8").splitlines()
+    total_lines = len(lines)
+
+    if total_lines == 0:
+        return f"file: {path}\ntotal lines: 0, file is empty."
+
+    if start_line > total_lines:
+        raise ValueError(f"start_line is out of bounds, total lines is {total_lines}")
+
+    # Read 100 lines by default and return 100 lines at most even the range is larger.
+    if end_line is None:
+        end_line = start_line + 99
+    actual_end = min(end_line, start_line + 99, total_lines)
+
+    selected = [
+        f"{number}: {lines[number - 1]}"
+        for number in range(start_line, actual_end + 1)
+    ]
+
+    header = (
+        f"file: {path}\n"
+        f"total lines: {total_lines}, return this turn:{start_line}-{actual_end}\n"
+    )
+
+    return header + "\n".join(selected)
 
 def search_code(keyword: str, path: str = ".") -> list[dict]:
     """
