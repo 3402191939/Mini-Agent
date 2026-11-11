@@ -3,6 +3,7 @@ import json
 from executor import execute_tool
 from datetime import datetime
 from pathlib import Path
+from model import ask_model
 
 INSTRUCTIONS = """
 You are a code repository Q&A assistant. Your task is to investigate the project using tools, gather evidence, and answer questions.
@@ -78,40 +79,15 @@ def run_agent(question: str, max_steps: int = 8) -> None:
             )
 
         print(f"\n====== Turn {step}/{max_steps} ======")
-        print("The prompt below will be sent to the model:\n")
-        print(prompt)
 
-        # When the input failed, repeat input this turn.
-        while True:
-            raw = input("\nPlease paste the single-line JSON action from the model"
-                        "(enter '/quit' to stop): \n"
-            )
-            if raw.strip() == "/quit":
-                log_path = save_history(history, status="quit")
-                print(f"The task was stopped by the user and the record saved: {log_path}")
-                return
-            
-            try:
-                action = json.loads(raw)
-            except json.JSONDecodeError as exc:
-                print(f"JSON parsing failed: {exc}, please try again.")
-                continue
+        try:
+            action = ask_model(prompt)
+        except (KeyboardInterrupt, EOFError):
+            log_path = save_history(history, status="quit")
+            print(f"\nTask has been quit and the record saved:{log_path}")
+            return
 
-            if not isinstance(action, dict):
-                print("The model's action must be a JSON object.")
-                continue
-
-            action_type = action.get("type")
-            if action_type == "final":
-                content = action.get("content")
-                if not isinstance(content, str) or not content.strip():
-                    print("The final answer must include a 'content' field with a non-empty string.")
-                    continue
-            elif action_type != "tool_call":
-                print("Type must be tool_call or final, please paste again.")
-                continue
-            break
-
+        action_type = action["type"]
         history.append({
             "role": "assistant",
             "content": action,
