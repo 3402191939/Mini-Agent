@@ -1,36 +1,76 @@
 import json
+import os
+
+from pathlib import Path
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def ask_model(prompt: str) -> dict:
-    """Send prompt and return effective action, currently sending by manual"""
-    print("\nCopy the following text to model:\n")
-    print(prompt)
+    """Call AI model and return a validated action."""
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise RuntimeError("API_KEY is not configured")
+    print("\nRequesting model for action...")
 
-    while True:
-        raw = input(
-            "\nPaste the single-line JSON action from the model"
-            "(enter '/quit' to quit):\n"
+    with OpenAI(
+        api_key = api_key,
+        base_url = "https://api.deepseek.com",
+    ) as client:
+        response = client.chat.completions.create(
+            model="deepseek-flash",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Follow the supplied instructions and task history."
+                        "Return exactly one JSON object."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            response_format={"type": "json_object"},
+            extra_body={"thinking": {"type": "disabled"}},
+            max_tokens=2048,
         )
-        if raw.strip() == "/quit":
-            raise KeyboardInterrupt
 
-        try:
-            action = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            print(f"JSON parsing failed: {exc}, please try again.")
-            continue
+    if not response.choices:
+        raise RuntimeError("The model returned no choices")
 
-        if not isinstance(action, dict):
-            print("The model's action must be a JSON object, please try again.")
-            continue
+    choice = response.choices[0]
+    if choice.finish_reason != "stop":
+        raise RuntimeError(
+            f"The model output did not complete answer successfully: {choice.finish_reason}"
+        )
+    
+    raw = choice.message.content
+    print("\nRaw model response:")
+    print(repr(raw))
+    if not raw or not raw.strip():
+        raise RuntimeError("The model returned empty content")
 
-        action_type = action.get("type")
+    action = json.loads(raw)
+    if not isinstance(action, dict):
+        raise ValueError("The model output must be a JSON object")
 
-        if action_type == "final":
-            content = action.get("content")
-            if not isinstance(content, str) or not content.strip():
-                print("The final answer must include a non-empty content string.")
-                continue
-        elif action_type != "tool_call":
-            print("The type must be either 'tool_call' or 'final', please try again.")
-            continue
-        return action
+    action_type = action.get("type")
+    if action_type == "final":
+        content = action.get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("The final answer must include a non-empty content string.")
+    elif action_type != "tool_call":
+        raise ValueError("The type must be either 'tool_call' or 'final'")
+ 
+    print("\nModel action:")
+    print(json.dumps(action, ensure_ascii=False, indent=2))
+
+    if response.usage:
+        print(
+            f"\nTokens: input={response.usage.prompt_tokens}, "
+            f"output={response.usage.completion_tokens}"
+        )  
+    return action
